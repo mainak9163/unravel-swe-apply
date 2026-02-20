@@ -1,6 +1,6 @@
 from fastapi import Body, FastAPI, HTTPException
 
-from .agent import SYSTEM_PROMPT, run_agent
+from .agent import SYSTEM_PROMPT, run_agent, run_followup_and_send
 from .logging_setup import logger
 
 app = FastAPI(title="Job Application Agent (Gemini)")
@@ -62,3 +62,52 @@ Now perform your tasks. Start by searching for Unravel.tech founders.
         logger.exception("apply_job failed")
         raise HTTPException(status_code=500, detail=f"Agent error: {exc}") from exc
 
+
+@app.post("/followup/send")
+async def send_followup(details: dict = Body(...)):
+    """
+    POST /followup/send
+    Body (JSON):
+    {
+        "applicant_name": "Mainak Mukherjee",
+        "sender_email": "mainakcollege8967@gmail.com",
+        "repo_url": "https://github.com/mainak9163/unravel-swe-apply",
+        "recipient_override": "foundername.foundername@gmail.com",
+        "video_note": "I will add a process walkthrough video link in the repository shortly.",
+        "transparency_note": "...",
+        "subject": "Re: Application - Agent Code Repository"
+    }
+    """
+    logger.info("POST /followup/send request received keys=%s", sorted(details.keys()))
+    applicant_name = details.get("applicant_name", "Mainak Mukherjee")
+    sender_email = details.get("sender_email", "").strip()
+    repo_url = details.get("repo_url", "").strip()
+    recipient_override = details.get("recipient_override", "").strip()
+    video_note = details.get("video_note", "")
+    transparency_note = details.get("transparency_note", "")
+    subject = details.get("subject", "Re: Application - Agent Code Repository")
+
+    if not sender_email:
+        raise HTTPException(status_code=400, detail="sender_email is required.")
+    if not repo_url:
+        raise HTTPException(status_code=400, detail="repo_url is required.")
+
+    try:
+        result = run_followup_and_send(
+            applicant_name=applicant_name,
+            sender_email=sender_email,
+            repo_url=repo_url,
+            video_note=video_note,
+            transparency_note=transparency_note,
+            subject=subject,
+            recipient_override=recipient_override,
+        )
+        logger.info(
+            "send_followup completed founder_email=%s subject=%r",
+            result["founder_email"],
+            result["subject"],
+        )
+        return result
+    except Exception as exc:
+        logger.exception("send_followup failed")
+        raise HTTPException(status_code=500, detail=f"Agent error: {exc}") from exc

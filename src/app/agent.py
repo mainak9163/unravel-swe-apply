@@ -1,6 +1,7 @@
 from .config import GEMINI_MODEL
 from .gemini import call_gemini, identify_target_founder
 from .logging_setup import logger
+from .mailer import send_email
 from .search import collect_search_context
 
 SYSTEM_PROMPT = """
@@ -107,3 +108,90 @@ def run_agent(messages: list[dict]) -> str:
 
     raise RuntimeError("Gemini did not produce a valid final response.")
 
+
+def build_followup_reply_body(
+    founder_first_name: str,
+    applicant_name: str,
+    repo_url: str,
+    video_note: str,
+    transparency_note: str,
+) -> str:
+    """Build a professional follow-up body for the Unravel founder reply thread."""
+    greeting_name = (founder_first_name or "Prajwalit").strip().title()
+    name = (applicant_name or "Mainak Mukherjee").strip()
+    repo = (repo_url or "").strip()
+    if not repo:
+        raise RuntimeError("repo_url is required.")
+
+    video_line = (
+        (video_note or "").strip()
+        or "I will also add a process walkthrough video link in the repository shortly."
+    )
+    transparency_line = (
+        (transparency_note or "").strip()
+        or "For transparency: my initial outreach used tool-assisted web search while validating the task interpretation. This submission is a fully implemented agent workflow, and this follow-up is being handled by that built system."
+    )
+    return (
+        f"Hi {greeting_name},\n\n"
+        "Thank you for the update, and for the thoughtful review process.\n\n"
+        "As requested, sharing the agent repository here:\n"
+        f"{repo}\n\n"
+        "I have added a detailed README in the repo covering what the agent does, "
+        "how it is structured, and how it runs end-to-end. "
+        f"{video_line}\n\n"
+        f"{transparency_line}\n\n"
+        "Happy to share any additional details if helpful.\n\n"
+        "Best regards,\n"
+        f"{name}"
+    )
+
+
+def run_followup_and_send(
+    applicant_name: str,
+    sender_email: str,
+    repo_url: str,
+    video_note: str = "",
+    transparency_note: str = "",
+    subject: str = "Re: Application - Agent Code Repository",
+    recipient_override: str = "",
+) -> dict[str, str]:
+    """
+    Find PR-matching founder at Unravel.tech, compose follow-up message, and send it.
+    """
+    logger.info("run_followup_and_send start applicant=%r", applicant_name)
+    search_context = collect_search_context()
+    target_founder = identify_target_founder(search_context)
+    founder_name = target_founder["name"]
+    founder_first = founder_name.split()[0]
+    founder_email = f"{founder_first.lower()}@unravel.tech"
+    recipient_email = (recipient_override or "").strip() or founder_email
+    logger.info(
+        "run_followup_and_send founder_selected name=%r founder_email=%r recipient_email=%r",
+        founder_name,
+        founder_email,
+        recipient_email,
+    )
+
+    body = build_followup_reply_body(
+        founder_first_name=founder_first,
+        applicant_name=applicant_name,
+        repo_url=repo_url,
+        video_note=video_note,
+        transparency_note=transparency_note,
+    )
+
+    sender_clean = (sender_email or "").strip()
+    body_with_sender = f"{body}\nEmail: {sender_clean}\n"
+    delivery = send_email(
+        to_email=recipient_email,
+        subject=(subject or "").strip() or "Re: Application - Agent Code Repository",
+        body=body_with_sender,
+    )
+    return {
+        "founder_name": founder_name,
+        "founder_email": founder_email,
+        "recipient_email": recipient_email,
+        "subject": delivery["subject"],
+        "from_email": delivery["from_email"],
+        "body": body_with_sender,
+    }
