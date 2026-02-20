@@ -165,7 +165,7 @@ curl -X POST "http://127.0.0.1:8000/followup/send" \
 
 A walkthrough video demonstrating the full process (setup, run, and live output) will be added here:
 
-- `VIDEO_LINK_HERE`
+- [`VIDEO_LINK_HERE`](https://streamable.com/4l9f7k)
 
 ## Author
 
